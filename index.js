@@ -5,12 +5,14 @@ var stream = require("JSONStream"),
   async = require('async'),
   mkdirp = require('mkdirp')
 
+var ListStream = require('./ListStream');
+var FileStream = require('./FileStream');
+
 var argv = require('optimist')
   .usage('Usage: $0 -l MinZoom,MaxZoom -a Attribute -t TimeAttribute -s {torque|time}')
   .default('l', '0,6')
   .default('a', null)
   .default('t', null)
-  .default('s', 'time')
   .argv
 
 var levels = argv.l.split(',')
@@ -67,7 +69,7 @@ q.drain = function(){
   console.log(((maxTime-minTime)/(1000*60*60*24))/365, 'Total days')
 }
 
-var parser = stream.parse('features.*');
+var parser = stream.parse('alerts.*');
 parser.on('end', function () {
 
   // create tiles 
@@ -80,12 +82,16 @@ parser.on('end', function () {
   }
 });
 
-process.stdin
+var listStream = new ListStream('./waze'); // emits filenames
+var fileStream = new FileStream(null); // transforms filename stream into concatenated contents of said filenames (take a transform stream as parameter for each content)
+
+listStream
+  .pipe(fileStream)
   .pipe(parser)
   .pipe(es.mapSync(function (data) {
-    var coords = data.geometry.coordinates,
-      value = data.properties[argv.a],
-      time = data.properties[argv.t]
+    var coords = [data.location.x,data.location.y],
+      value = data[argv.a],
+      time = data[argv.t]
 
     var date = new Date(time)    
     minTime = (!minTime) ? date : Math.min(date, minTime)
